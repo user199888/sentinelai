@@ -150,6 +150,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   </div>
   <div class="nav">
     <button class="active" onclick="switchTab('scan')">项目扫描</button>
+    <button onclick="switchTab('codescan')">💻 代码审查</button>
     <button onclick="switchTab('review')">批量审批</button>
     <button onclick="switchTab('history')">📋 历史记录</button>
   </div>
@@ -240,6 +241,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 </div>
 
+<!-- Tab: 代码审查 -->
+<div class="tab-content" id="tab-codescan">
+<div class="panel">
+  <div class="panel-title">💻 粘贴代码审查</div>
+  <p style="color:#888;font-size:13px;margin-bottom:10px">直接粘贴代码片段，快速检测安全漏洞</p>
+  <div style="display:flex;gap:10px;margin-bottom:10px">
+    <select id="codeLang" style="padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px;outline:none">
+      <option value="python">Python</option>
+      <option value="javascript">JavaScript</option>
+      <option value="typescript">TypeScript</option>
+      <option value="java">Java</option>
+      <option value="go">Go</option>
+      <option value="rust">Rust</option>
+      <option value="php">PHP</option>
+      <option value="shell">Shell</option>
+    </select>
+    <input type="text" id="codeFilename" placeholder="可选：文件名" style="flex:1;padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px;outline:none">
+    <button class="btn btn-primary" onclick="startCodeScan()">🔍 开始审查</button>
+  </div>
+  <textarea id="codeInput" placeholder="在此粘贴要审查的代码..." style="width:100%;height:300px;padding:14px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;font-family:monospace;outline:none;resize:vertical;tab-size:2"></textarea>
+</div>
+</div>
+
 <!-- Tab: 历史记录 -->
 <div class="tab-content" id="tab-history">
 <div class="panel">
@@ -290,6 +314,18 @@ function startScan() {
   const v = document.getElementById('projectInput').value.trim();
   if (!v) { alert('请输入项目路径'); return; }
   doScan(JSON.stringify({project: v}));
+}
+
+function startCodeScan() {
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) { alert('请粘贴要审查的代码'); return; }
+  const lang = document.getElementById('codeLang').value;
+  let fn = document.getElementById('codeFilename').value.trim();
+  if (!fn) {
+    const extMap = {python:'py', javascript:'js', typescript:'ts', java:'java', go:'go', rust:'rs', php:'php', shell:'sh'};
+    fn = 'code.' + (extMap[lang] || 'txt');
+  }
+  doScan(JSON.stringify({code, language: lang, filename: fn}));
 }
 
 function uploadFile(el) {
@@ -372,7 +408,14 @@ function doScan(body, isForm) {
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('statusText').textContent = '正在启动...';
 
-  const url = isForm ? '/api/upload' : '/api/scan';
+  let url = isForm ? '/api/upload' : '/api/scan';
+  // 如果是代码审查，使用代码审查 API
+  if (!isForm) {
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.code) url = '/api/scan/code';
+    } catch(e) {}
+  }
   const opts = { method: 'POST' };
   if (isForm) opts.body = body;
   else { opts.headers = {'Content-Type':'application/json'}; opts.body = body; }

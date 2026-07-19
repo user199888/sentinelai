@@ -157,6 +157,53 @@ def upload():
     t.start()
     return jsonify({'task_id': tid, 'message': '文件已上传'})
 
+
+@app.route('/api/scan/code', methods=['POST'])
+def scan_code():
+    """直接审查提交的代码片段"""
+    data = request.json or {}
+    code = data.get('code', '').strip()
+    if not code:
+        return jsonify({'error': '请粘贴代码'}), 400
+
+    language = data.get('language', 'python')
+    filename = data.get('filename', f'snippet.{language}')
+
+    tid = uuid.uuid4().hex[:8]
+    tmp_dir = os.path.join(app.config['UPLOAD_FOLDER'], f'code_{tid}')
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # 写入代码文件
+    file_path = os.path.join(tmp_dir, filename)
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(code)
+
+    # 如果有 requirements / package.json 也创建空占位（让 parser 更好识别）
+    if language == 'python':
+        req_path = os.path.join(tmp_dir, 'requirements.txt')
+        if not os.path.exists(req_path):
+            with open(req_path, 'w') as f:
+                f.write('# code snippet')
+    elif language in ('javascript', 'typescript'):
+        pkg_path = os.path.join(tmp_dir, 'package.json')
+        if not os.path.exists(pkg_path):
+            with open(pkg_path, 'w') as f:
+                f.write('{"name":"snippet","version":"1.0.0"}')
+
+    TASKS[tid] = {
+        'status': 'queued',
+        'progress': 0,
+        'result': None,
+        'started_at': datetime.now(),
+        'finished_at': None,
+        'tmp_dir': tmp_dir,
+    }
+
+    t = threading.Thread(target=_scan_worker, args=(tid, tmp_dir), daemon=True)
+    t.start()
+    return jsonify({'task_id': tid, 'message': '代码审查已启动'})
+
+
 @app.route('/api/status/<tid>')
 def get_status(tid):
     t = TASKS.get(tid)
