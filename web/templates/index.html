@@ -113,9 +113,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sev-medium{background:#feffe6;color:#fadb14}
 .sev-low{background:#f6ffed;color:#52c41a}
 .file-path{color:#999;font-size:12px}
-.finding-detail{display:none;padding:8px 0 0 36px;font-size:13px;color:#555;line-height:1.6}
-.finding-detail.open{display:block}
-.finding-detail code{display:block;background:#f5f5f5;padding:6px 10px;border-radius:4px;font-size:12px;margin:4px 0}
+.finding-detail{display:none;font-size:13px;color:#555;line-height:1.6}
+.finding-detail.open{display:table-row}
+.finding-detail td{padding:4px 12px 12px 48px !important;background:#fafbfc}
+.detail-body p{margin:4px 0}
+.detail-body code{display:block;background:#f0f0f0;padding:6px 10px;border-radius:4px;font-size:12px;margin:4px 0 8px;word-break:break-all}
 .detail-toggle{cursor:pointer;color:#667eea;font-size:12px;text-decoration:none}
 .detail-toggle:hover{text-decoration:underline}
 
@@ -454,28 +456,42 @@ function loadReport() {
     fs.forEach((f, i) => {
       const sev = f.severity || 'Low';
       const sc = sev === 'Critical' ? 'sev-critical' : sev === 'High' ? 'sev-high' : sev === 'Medium' ? 'sev-medium' : 'sev-low';
+      // 主行
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="chk"><input type="checkbox" value="${i}" onchange="updateCount()"></td>
         <td><span class="sev-tag ${sc}">${sev}</span></td>
         <td>${f.title || f.vuln_type || ''}</td>
         <td><div class="file-path">${f.file_path || ''}:${f.line_start || ''}</div></td>
-        <td><a class="detail-toggle" onclick="toggleDetail(this)">查看</a></td>`;
-      tr.insertAdjacentHTML('beforeend', `<tr class="finding-detail" id="dtl-${i}"><td colspan="5">
-        <strong>描述：</strong>${f.description || ''}<br>
-        ${f.evidence ? '<strong>依据：</strong><code>'+f.evidence+'</code><br>' : ''}
-        <strong>建议：</strong>${f.fix_suggestion || ''}
-        ${f.fix_patch ? '<br><strong>Patch：</strong><code>'+f.fix_patch+'</code>' : ''}
-      </td></tr>`);
+        <td><a class="detail-toggle" onclick="toggleDetail(this, ${i})">查看</a></td>`;
       tb.appendChild(tr);
+      // 详情行（隐藏，点击后展开）
+      const dtl = document.createElement('tr');
+      dtl.className = 'finding-detail';
+      dtl.id = 'dtl-' + i;
+      dtl.innerHTML = `<td colspan="5">
+        <div class="detail-body">
+          <p><strong>描述：</strong>${f.description || '无'}</p>
+          ${f.evidence ? '<p><strong>依据：</strong><code>'+_escHtml(f.evidence)+'</code></p>' : ''}
+          <p><strong>修复建议：</strong>${f.fix_suggestion || '无'}</p>
+          ${f.fix_patch ? '<p><strong>补丁：</strong><code>'+_escHtml(f.fix_patch)+'</code></p>' : ''}
+        </div>
+      </td>`;
+      tb.appendChild(dtl);
     });
   });
 }
 
-function toggleDetail(el) {
-  const tr = el.closest('tr').nextElementSibling;
-  tr.classList.toggle('open');
-  el.textContent = tr.classList.contains('open') ? '收起' : '查看';
+function _escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleDetail(el, idx) {
+  const dtl = document.getElementById('dtl-' + idx);
+  if (!dtl) return;
+  const isOpen = dtl.classList.toggle('open');
+  el.textContent = isOpen ? '收起' : '查看';
 }
 
 function updateCount() {

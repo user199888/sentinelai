@@ -37,12 +37,16 @@ def run_step(name, script, args, step_log_file=None, progress_callback=None, ste
     log(f"执行: {' '.join(cmd)}")
 
     try:
+        # 强制子进程非缓冲输出，确保进度标记实时到达
+        _env = os.environ.copy()
+        _env['PYTHONUNBUFFERED'] = '1'
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,
+            env=_env
         )
 
         stdout_lines = []

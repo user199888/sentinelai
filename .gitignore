@@ -39,3 +39,18 @@ tmp/
 
 # 软链接（本地开发用）
 review_fix
+
+# 生成文件（各步骤的输出产物）
+parser/project-index.json
+security/security-findings.json
+security/report.html
+review-fix/review-report.json
+review-fix/review-report.txt
+report/security-report.json
+report/security-report.md
+report/security-report.html
+
+# 临时/备份文件
+fix_scanner.py
+fix_status.txt
+*.bak
