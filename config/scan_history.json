@@ -1,0 +1,34 @@
+[
+  {
+    "task_id": "9a5268df",
+    "project_name": "Vulnerable-Flask-App",
+    "project_path": "https://github.com/we45/Vulnerable-Flask-App",
+    "risk_score": 100,
+    "risk_level": "F (极危险)",
+    "summary": {
+      "total": 25,
+      "critical": 6,
+      "high": 11,
+      "medium": 8,
+      "low": 0
+    },
+    "finished_at": "",
+    "report_path": "/home/zyzyt/.openclaw/workspace/sentinelai/report/security-report.json"
+  },
+  {
+    "task_id": "84a2c20c",
+    "project_name": "Vulnerable-Flask-App",
+    "project_path": "https://github.com/we45/Vulnerable-Flask-App",
+    "risk_score": 100,
+    "risk_level": "F (极危险)",
+    "summary": {
+      "total": 25,
+      "critical": 6,
+      "high": 11,
+      "medium": 8,
+      "low": 0
+    },
+    "finished_at": "",
+    "report_path": "/home/zyzyt/.openclaw/workspace/sentinelai/report/security-report.json"
+  }
+]

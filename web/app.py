@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(BASE, 'review-fix'))
 
 from pm.orchestrator import run_pipeline
 from shared.git_support import is_github_url
+import shared.db as db
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
@@ -225,6 +226,81 @@ def batch_update():
             pass
     return jsonify({'message': f'已更新 {count} 条记录', 'status': status})
 
+# ── History ──────────────────────────────────────────────────
+HISTORY_FILE = os.path.join(BASE, 'config', 'scan_history.json')
+_hist_lock = threading.Lock()
+
+def _save_scan_history(task_id, info):
+    """将扫描记录持久化到 JSON 文件（重启不丢失）"""
+    if info['status'] != 'done':
+        return
+    try:
+        with _hist_lock:
+            history = []
+            if os.path.exists(HISTORY_FILE):
+                with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    try:
+                        history = json.load(f)
+                    except:
+                        history = []
+            
+            result = info.get('result') or {}
+            project_name = info.get('project_name', '未知项目')
+            entry = {
+                'task_id': task_id,
+                'project_name': project_name,
+                'project_path': info.get('project_path', ''),
+                'risk_score': result.get('risk_score', 0),
+                'risk_level': result.get('risk_level', ''),
+                'summary': result.get('summary', {}),
+                'finished_at': info['finished_at'].isoformat() if info.get('finished_at') else '',
+                'report_path': info.get('report_path', ''),
+            }
+            # 去重：相同 task_id 则替换
+            history = [h for h in history if h.get('task_id') != task_id]
+            history.insert(0, entry)
+            # 最多保留 50 条
+            history = history[:50]
+            with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+                json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+@app.route('/api/history')
+def list_history():
+    """获取扫描历史列表"""
+    if not os.path.exists(HISTORY_FILE):
+        return jsonify({'history': []})
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+        return jsonify({'history': history})
+    except Exception:
+        return jsonify({'history': []})
+
+
+@app.route('/api/history/<task_id>')
+def get_history(task_id):
+    """获取指定历史记录的完整报告"""
+    if not os.path.exists(HISTORY_FILE):
+        return jsonify({'error': '无历史记录'}), 404
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+        for entry in history:
+            if entry['task_id'] == task_id:
+                report_path = entry.get('report_path', '')
+                if report_path and os.path.exists(report_path):
+                    with open(report_path, 'r', encoding='utf-8') as rf:
+                        return jsonify(json.load(rf))
+                else:
+                    return jsonify({'error': '报告文件已丢失'}), 404
+        return jsonify({'error': '未找到该记录'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── Scan Worker ─────────────────────────────────────────────
 def _scan_worker(task_id, project_path):
     """后台扫描工作线程"""
@@ -249,6 +325,14 @@ def _scan_worker(task_id, project_path):
         info['progress'] = max(pct, 2)
 
     info['progress'] = 5
+    info['project_path'] = project_path
+    # 提取项目名
+    if project_path.startswith('http'):
+        project_name = project_path.rstrip('/').split('/')[-1].replace('.git', '')
+    else:
+        project_name = os.path.basename(project_path.rstrip('/\\'))
+    info['project_name'] = project_name
+
     try:
         result = run_pipeline(project_path, progress_callback=on_progress)
 
@@ -259,6 +343,7 @@ def _scan_worker(task_id, project_path):
             # 记录报告路径
             report_dir = result.get('report_dir', os.path.join(BASE, 'report'))
             info['report_path'] = os.path.join(report_dir, 'security-report.json')
+            _save_scan_history(task_id, info)
         else:
             info.update({'status': 'failed', 'progress': 0,
                          'error': '流水线执行失败，请检查日志',

@@ -121,6 +121,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .detail-toggle{cursor:pointer;color:#667eea;font-size:12px;text-decoration:none}
 .detail-toggle:hover{text-decoration:underline}
 
+/* History */
+.history-card{display:flex;align-items:center;padding:14px 16px;border:1px solid #f0f0f0;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all 0.2s}
+.history-card:hover{border-color:#667eea;background:#fafbff}
+.history-card .hinfo{flex:1;min-width:0}
+.history-card .hname{font-size:14px;font-weight:600;color:#333}
+.history-card .hmeta{font-size:12px;color:#999;margin-top:2px}
+.history-card .hscore{text-align:right;min-width:80px}
+.history-card .hscore-num{font-size:20px;font-weight:700}
+.history-card .hscore-lbl{font-size:11px;color:#999}
+.history-empty{text-align:center;padding:60px 0;color:#bbb}
+.history-empty .icon{font-size:48px;margin-bottom:12px}
+
 .empty{text-align:center;padding:60px 0;color:#bbb}
 .empty .icon{font-size:48px;margin-bottom:12px}
 .empty p{font-size:14px}
@@ -139,6 +151,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="nav">
     <button class="active" onclick="switchTab('scan')">项目扫描</button>
     <button onclick="switchTab('review')">批量审批</button>
+    <button onclick="switchTab('history')">📋 历史记录</button>
   </div>
 </div>
 
@@ -227,6 +240,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 </div>
 
+<!-- Tab: 历史记录 -->
+<div class="tab-content" id="tab-history">
+<div class="panel">
+  <div class="panel-title">📋 扫描历史</div>
+  <div id="historyList"><div class="empty"><div class="icon">📋</div><p>暂无扫描记录</p></div></div>
+</div>
+</div>
+
 <!-- Tab: 批量审批 -->
 <div class="tab-content" id="tab-review">
 <div class="panel">
@@ -256,6 +277,7 @@ function switchTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
   if (name === 'review') loadReviewFindings();
+  if (name === 'history') loadHistory();
 }
 
 function backToInput() {
@@ -404,81 +426,8 @@ function loadReport() {
   if (!taskId) return;
   fetch('/api/report/' + taskId).then(r=>r.json()).then(d => {
     if (d.error) return;
-    document.getElementById('statusPanel').style.display = 'none';
-    document.getElementById('resultPanel').style.display = 'block';
-
-    const sc = d.risk_assessment?.score || 0;
-    const lv = d.risk_assessment?.level || '';
-    const sm = d.summary || {};
-    const fs = d.findings || [];
-    curFindings = fs;
-
-    const el = document.getElementById('scoreNum');
-    el.textContent = sc;
-    el.className = 'score-num';
-    if (sc >= 80) el.classList.add('score-critical');
-    else if (sc >= 60) el.classList.add('score-high');
-    else if (sc >= 40) el.classList.add('score-medium');
-    else el.classList.add('score-low');
-    document.getElementById('scoreLevel').textContent = lv;
-
-    document.getElementById('stCr').textContent = sm.critical || 0;
-    document.getElementById('stHi').textContent = sm.high || 0;
-    document.getElementById('stMe').textContent = sm.medium || 0;
-    document.getElementById('stLo').textContent = sm.low || 0;
-
-    // Pie chart
-    if (pieChart) pieChart.destroy();
-    const ctx = document.getElementById('pieChart').getContext('2d');
-    pieChart = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Critical','High','Medium','Low'],
-        datasets: [{
-          data: [sm.critical||0, sm.high||0, sm.medium||0, sm.low||0],
-          backgroundColor: ['#e94560','#fa8c16','#fadb14','#52c41a'],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: {size: 11} } } }
-      }
-    });
-
-    // Table
-    const tb = document.getElementById('findingsBody');
-    tb.innerHTML = '';
-    if (fs.length === 0) {
-      tb.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="icon">✅</div><p>未发现安全风险</p></div></td></tr>';
-      return;
-    }
-    fs.forEach((f, i) => {
-      const sev = f.severity || 'Low';
-      const sc = sev === 'Critical' ? 'sev-critical' : sev === 'High' ? 'sev-high' : sev === 'Medium' ? 'sev-medium' : 'sev-low';
-      // 主行
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="chk"><input type="checkbox" value="${i}" onchange="updateCount()"></td>
-        <td><span class="sev-tag ${sc}">${sev}</span></td>
-        <td>${f.title || f.vuln_type || ''}</td>
-        <td><div class="file-path">${f.file_path || ''}:${f.line_start || ''}</div></td>
-        <td><a class="detail-toggle" onclick="toggleDetail(this, ${i})">查看</a></td>`;
-      tb.appendChild(tr);
-      // 详情行（隐藏，点击后展开）
-      const dtl = document.createElement('tr');
-      dtl.className = 'finding-detail';
-      dtl.id = 'dtl-' + i;
-      dtl.innerHTML = `<td colspan="5">
-        <div class="detail-body">
-          <p><strong>描述：</strong>${f.description || '无'}</p>
-          ${f.evidence ? '<p><strong>依据：</strong><code>'+_escHtml(f.evidence)+'</code></p>' : ''}
-          <p><strong>修复建议：</strong>${f.fix_suggestion || '无'}</p>
-          ${f.fix_patch ? '<p><strong>补丁：</strong><code>'+_escHtml(f.fix_patch)+'</code></p>' : ''}
-        </div>
-      </td>`;
-      tb.appendChild(dtl);
-    });
+    curFindings = d.findings || [];
+    renderReport(d);
   });
 }
 
@@ -514,6 +463,136 @@ function batchUpdate(status) {
     document.querySelectorAll('#findingsBody input:checked').forEach(c => c.checked = false);
     updateCount();
   });
+}
+
+// ── 历史记录 ─────────────────────────────────
+function loadHistory() {
+  fetch('/api/history').then(r=>r.json()).then(d => {
+    const wrap = document.getElementById('historyList');
+    const list = d.history || [];
+    if (list.length === 0) {
+      wrap.innerHTML = '<div class="history-empty"><div class="icon">📋</div><p>暂无扫描记录，执行一次审计后这里就会有记录了</p></div>';
+      return;
+    }
+    let html = '';
+    list.forEach(h => {
+      const sm = h.summary || {};
+      const total = sm.total || 0;
+      const sc = h.risk_score || 0;
+      const lv = h.risk_level || '';
+      let cls = 'hscore-num';
+      if (sc >= 80) cls += ' score-critical';
+      else if (sc >= 60) cls += ' score-high';
+      else if (sc >= 40) cls += ' score-medium';
+      else cls += ' score-low';
+      html += `<div class="history-card" onclick="viewHistory('${h.task_id}')">
+        <div class="hinfo">
+          <div class="hname">${_escHtml(h.project_name)}</div>
+          <div class="hmeta">${_escHtml(h.project_path)} · ${h.finished_at ? h.finished_at.slice(0,16) : '未知时间'} · 共 ${total} 个发现</div>
+        </div>
+        <div class="hscore">
+          <div class="${cls}">${sc}</div>
+          <div class="hscore-lbl">${lv}</div>
+        </div>
+      </div>`;
+    });
+    wrap.innerHTML = html;
+  });
+}
+
+function viewHistory(taskId) {
+  fetch('/api/history/' + taskId).then(r=>r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    // 切换到扫描 tab 展示报告
+    taskId = taskId;
+    curFindings = d.findings || [];
+    renderReport(d);
+    switchTab2('scan');
+  });
+}
+
+function renderReport(d) {
+  document.getElementById('inputPanel').style.display = 'none';
+  document.getElementById('statusPanel').style.display = 'none';
+  document.getElementById('resultPanel').style.display = 'block';
+
+  const sc = d.risk_assessment?.score || 0;
+  const lv = d.risk_assessment?.level || '';
+  const sm = d.summary || {};
+  const fs = d.findings || [];
+  curFindings = fs;
+
+  const el = document.getElementById('scoreNum');
+  el.textContent = sc;
+  el.className = 'score-num';
+  if (sc >= 80) el.classList.add('score-critical');
+  else if (sc >= 60) el.classList.add('score-high');
+  else if (sc >= 40) el.classList.add('score-medium');
+  else el.classList.add('score-low');
+  document.getElementById('scoreLevel').textContent = lv;
+
+  document.getElementById('stCr').textContent = sm.critical || 0;
+  document.getElementById('stHi').textContent = sm.high || 0;
+  document.getElementById('stMe').textContent = sm.medium || 0;
+  document.getElementById('stLo').textContent = sm.low || 0;
+
+  // Pie chart
+  if (pieChart) pieChart.destroy();
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Critical','High','Medium','Low'],
+      datasets: [{
+        data: [sm.critical||0, sm.high||0, sm.medium||0, sm.low||0],
+        backgroundColor: ['#e94560','#fa8c16','#fadb14','#52c41a'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: {size: 11} } } }
+    }
+  });
+
+  // Table
+  const tb = document.getElementById('findingsBody');
+  tb.innerHTML = '';
+  if (fs.length === 0) {
+    tb.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="icon">✅</div><p>未发现安全风险</p></div></td></tr>';
+    return;
+  }
+  fs.forEach((f, i) => {
+    const sev = f.severity || 'Low';
+    const sc = sev === 'Critical' ? 'sev-critical' : sev === 'High' ? 'sev-high' : sev === 'Medium' ? 'sev-medium' : 'sev-low';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="chk"><input type="checkbox" value="${i}" onchange="updateCount()"></td>
+      <td><span class="sev-tag ${sc}">${sev}</span></td>
+      <td>${f.title || f.vuln_type || ''}</td>
+      <td><div class="file-path">${f.file_path || ''}:${f.line_start || ''}</div></td>
+      <td><a class="detail-toggle" onclick="toggleDetail(this, ${i})">查看</a></td>`;
+    tb.appendChild(tr);
+    const dtl = document.createElement('tr');
+    dtl.className = 'finding-detail';
+    dtl.id = 'dtl-' + i;
+    dtl.innerHTML = `<td colspan="5">
+      <div class="detail-body">
+        <p><strong>描述：</strong>${f.description || '无'}</p>
+        ${f.evidence ? '<p><strong>依据：</strong><code>'+_escHtml(f.evidence)+'</code></p>' : ''}
+        <p><strong>修复建议：</strong>${f.fix_suggestion || '无'}</p>
+        ${f.fix_patch ? '<p><strong>补丁：</strong><code>'+_escHtml(f.fix_patch)+'</code></p>' : ''}
+      </div>
+    </td>`;
+    tb.appendChild(dtl);
+  });
+}
+
+function switchTab2(name) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.nav button')[0].classList.add('active');
 }
 
 function loadReviewFindings() {
