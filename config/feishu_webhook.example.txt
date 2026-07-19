@@ -1,0 +1,7 @@
+# SentinelAI 飞书通知配置文件
+# 在飞书群中添加自定义机器人，复制 Webhook 地址填到下面
+# 然后把文件名改为 feishu_webhook.txt 即可启用
+# 也可以通过环境变量 SENTINELAI_FEISHU_WEBHOOK 设置
+#
+# 示例:
+# https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx

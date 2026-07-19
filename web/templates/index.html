@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinelAI - 安全审计控制台</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;margin-bottom:20px}
+.header h1{font-size:22px;color:#1a1a2e;display:flex;align-items:center;gap:8px}
+.header .sub{color:#888;font-size:13px}
+.nav{display:flex;gap:4px;background:#fff;border-radius:8px;padding:4px}
+.nav button{padding:8px 20px;border:none;border-radius:6px;background:transparent;cursor:pointer;font-size:14px;color:#666;transition:all 0.2s}
+.nav button.active{background:#1a1a2e;color:#fff}
+
+/* Panel */
+.panel{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.panel-title{font-size:15px;font-weight:600;margin-bottom:12px;color:#1a1a2e}
+
+/* Input */
+.input-row{display:flex;gap:10px;flex-wrap:wrap}
+.input-row input{flex:1;min-width:200px;padding:10px 14px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px;outline:none;transition:border 0.2s}
+.input-row input:focus{border-color:#667eea;box-shadow:0 0 0 2px rgba(102,126,234,0.15)}
+.btn{padding:10px 22px;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;transition:all 0.2s}
+.btn-primary{background:#1a1a2e;color:#fff}
+.btn-primary:hover{background:#2a2a4e}
+.btn-outline{background:transparent;border:1px solid #d9d9d9;color:#666}
+.btn-outline:hover{border-color:#667eea;color:#667eea}
+.btn-sm{padding:6px 14px;font-size:13px}
+.btn-danger{background:#e94560;color:#fff}
+.btn-danger:hover{background:#d63851}
+.btn-success{background:#52c41a;color:#fff}
+.btn-success:hover{background:#45a818}
+
+.upload-zone{margin-top:10px;padding:16px;border:2px dashed #d9d9d9;border-radius:8px;text-align:center;cursor:pointer;transition:all 0.2s}
+.upload-zone:hover{border-color:#667eea;background:rgba(102,126,234,0.03)}
+.upload-zone p{color:#999;font-size:13px}
+
+/* Tab content */
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* ── Pipeline Animation ── */
+.pipeline{display:flex;align-items:flex-start;justify-content:space-between;padding:30px 10px 20px;position:relative;overflow-x:auto}
+.pipeline::before{content:'';position:absolute;top:62px;left:60px;right:60px;height:3px;background:#e8e8e8;z-index:0}
+.pipeline.active::before{background:linear-gradient(90deg,#667eea,#667eea) no-repeat;background-size:var(--progress,0%) 100%;transition:background-size 0.5s}
+.pstep{display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;z-index:1;flex:1;min-width:0}
+.pstep .icon-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:#f5f5f5;border:2px solid #e0e0e0;transition:all 0.4s}
+.pstep .label{font-size:11px;color:#999;text-align:center;white-space:nowrap;transition:all 0.3s;line-height:1.3}
+.pstep .sub-label{font-size:10px;color:#ccc;text-align:center;transition:all 0.3s}
+.pstep.done .icon-circle{background:#e6f7e6;border-color:#52c41a;box-shadow:0 0 0 4px rgba(82,196,26,0.1);animation:pulse-green 0.6s}
+.pstep.done .label{color:#52c41a;font-weight:600}
+.pstep.done .sub-label{color:#95de64}
+.pstep.active .icon-circle{background:#f0f5ff;border-color:#667eea;box-shadow:0 0 0 4px rgba(102,126,234,0.15);animation:pulse-blue 1s infinite}
+.pstep.active .label{color:#667eea;font-weight:600}
+.pstep.active .sub-label{color:#667eea;animation:dots 1.5s infinite}
+.pstep.fail .icon-circle{background:#fff1f0;border-color:#e94560;animation:none}
+.pstep.fail .label{color:#e94560}
+@keyframes pulse-green{0%{box-shadow:0 0 0 4px rgba(82,196,26,0.1)}50%{box-shadow:0 0 0 8px rgba(82,196,26,0.05)}100%{box-shadow:0 0 0 4px rgba(82,196,26,0.1)}}
+@keyframes pulse-blue{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+@keyframes dots{0%,20%{opacity:1}50%{opacity:0.4}80%,100%{opacity:1}}
+
+/* Status bar */
+.status-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.track{flex:1;height:6px;background:#eee;border-radius:3px;overflow:hidden}
+.track-fill{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:3px;transition:width 0.5s;width:0%}
+.status-text{color:#888;font-size:13px;font-weight:500;min-width:120px;text-align:right}
+.pipeline-progress-text{text-align:center;color:#aaa;font-size:12px;margin-top:4px}
+
+/* Dashboard */
+.dashboard-grid{display:grid;grid-template-columns:280px 1fr;gap:16px}
+@media(max-width:768px){.dashboard-grid{grid-template-columns:1fr}}
+
+.dashboard-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.dashboard-header h2{font-size:18px;color:#1a1a2e}
+
+.score-card{text-align:center;padding:30px 16px}
+.score-num{font-size:56px;font-weight:800;line-height:1}
+.score-label{font-size:14px;color:#888;margin-top:8px}
+.score-level{font-size:16px;font-weight:600;margin-top:4px}
+.score-critical{color:#e94560}
+.score-high{color:#fa8c16}
+.score-medium{color:#fadb14}
+.score-low{color:#52c41a}
+
+.chart-container{height:200px;position:relative}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.stat-card{padding:14px;border-radius:8px;background:#fafafa;text-align:center;border-left:3px solid #ddd}
+.stat-card.cr{border-color:#e94560}
+.stat-card.hi{border-color:#fa8c16}
+.stat-card.me{border-color:#fadb14}
+.stat-card.lo{border-color:#52c41a}
+.stat-num{font-size:24px;font-weight:700}
+.stat-lbl{font-size:12px;color:#888;margin-top:2px}
+
+/* Findings table */
+.toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.toolbar .count{font-size:13px;color:#888}
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th{padding:10px 12px;text-align:left;background:#fafafa;font-weight:600;color:#555;border-bottom:2px solid #eee;white-space:nowrap}
+.table td{padding:10px 12px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.table tr:hover td{background:#fafbff}
+.table .chk{width:36px;text-align:center}
+.sev-tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600}
+.sev-critical{background:#fff1f0;color:#e94560}
+.sev-high{background:#fff7e6;color:#fa8c16}
+.sev-medium{background:#feffe6;color:#fadb14}
+.sev-low{background:#f6ffed;color:#52c41a}
+.file-path{color:#999;font-size:12px}
+.finding-detail{display:none;padding:8px 0 0 36px;font-size:13px;color:#555;line-height:1.6}
+.finding-detail.open{display:block}
+.finding-detail code{display:block;background:#f5f5f5;padding:6px 10px;border-radius:4px;font-size:12px;margin:4px 0}
+.detail-toggle{cursor:pointer;color:#667eea;font-size:12px;text-decoration:none}
+.detail-toggle:hover{text-decoration:underline}
+
+.empty{text-align:center;padding:60px 0;color:#bbb}
+.empty .icon{font-size:48px;margin-bottom:12px}
+.empty p{font-size:14px}
+
+.footer{text-align:center;padding:20px;color:#bbb;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <div>
+    <h1>🛡 SentinelAI</h1>
+    <div class="sub">安全审计控制台</div>
+  </div>
+  <div class="nav">
+    <button class="active" onclick="switchTab('scan')">项目扫描</button>
+    <button onclick="switchTab('review')">批量审批</button>
+  </div>
+</div>
+
+<!-- Tab: 扫描 -->
+<div class="tab-content active" id="tab-scan">
+
+<div class="panel" id="inputPanel">
+  <div class="panel-title">项目路径</div>
+  <div class="input-row">
+    <input type="text" id="projectInput" placeholder="本地路径 或 https://github.com/owner/repo">
+    <button class="btn btn-primary" onclick="startScan()">开始审计</button>
+  </div>
+  <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+    <p>📦 上传 ZIP 文件</p>
+    <input type="file" id="fileInput" accept=".zip" onchange="uploadFile(this)" style="display:none">
+  </div>
+</div>
+
+<div class="panel" id="statusPanel" style="display:none">
+  <div class="status-bar">
+    <div class="track"><div class="track-fill" id="progressFill"></div></div>
+    <span class="status-text" id="statusText">初始化...</span>
+  </div>
+
+  <!-- 5-step Pipeline Animation -->
+  <div class="pipeline" id="pipeline">
+    <div class="pstep" id="ps1">
+      <div class="icon-circle">📂</div>
+      <div class="label">Parser Agent</div>
+      <div class="sub-label">项目结构扫描</div>
+    </div>
+    <div class="pstep" id="ps2">
+      <div class="icon-circle">🔍</div>
+      <div class="label">Security Agent</div>
+      <div class="sub-label">漏洞检测</div>
+    </div>
+    <div class="pstep" id="ps3">
+      <div class="icon-circle">🛠</div>
+      <div class="label">Review Agent</div>
+      <div class="sub-label">审查与修复</div>
+    </div>
+    <div class="pstep" id="ps4">
+      <div class="icon-circle">📋</div>
+      <div class="label">Report Agent</div>
+      <div class="sub-label">报告生成</div>
+    </div>
+    <div class="pstep" id="ps5">
+      <div class="icon-circle">📊</div>
+      <div class="label">Summary</div>
+      <div class="sub-label">汇总结果</div>
+    </div>
+  </div>
+  <div class="pipeline-progress-text" id="pipelineProgress">等待启动...</div>
+</div>
+
+<div class="panel" id="resultPanel" style="display:none">
+  <div class="dashboard-header">
+    <h2>📊 审计报告</h2>
+    <button class="btn btn-outline btn-sm" onclick="backToInput()">← 返回重新审计</button>
+  </div>
+  <div class="dashboard-grid">
+    <div>
+      <div class="score-card">
+        <div class="score-num" id="scoreNum">--</div>
+        <div class="score-label">风险评分</div>
+        <div class="score-level" id="scoreLevel"></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </div>
+    <div>
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card cr"><div class="stat-num" id="stCr">0</div><div class="stat-lbl">Critical</div></div>
+        <div class="stat-card hi"><div class="stat-num" id="stHi">0</div><div class="stat-lbl">High</div></div>
+        <div class="stat-card me"><div class="stat-num" id="stMe">0</div><div class="stat-lbl">Medium</div></div>
+        <div class="stat-card lo"><div class="stat-num" id="stLo">0</div><div class="stat-lbl">Low</div></div>
+      </div>
+      <table class="table" id="findingsTable">
+        <thead><tr><th class="chk"></th><th>严重程度</th><th>漏洞类型</th><th>位置</th><th>详情</th></tr></thead>
+        <tbody id="findingsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Tab: 批量审批 -->
+<div class="tab-content" id="tab-review">
+<div class="panel">
+  <div class="panel-title">批量审批</div>
+  <p style="color:#888;font-size:13px;margin-bottom:12px">勾选安全发现并批量标记处理状态</p>
+  <div class="toolbar" id="reviewToolbar" style="display:none">
+    <button class="btn btn-sm btn-success" onclick="batchUpdate('fixed')">✅ 标记已修复</button>
+    <button class="btn btn-sm btn-outline" onclick="batchUpdate('false_positive')">⛔ 标记误报</button>
+    <button class="btn btn-sm btn-outline" onclick="batchUpdate('acknowledged')">👁 标记已确认</button>
+    <span class="count" id="selectedCount">已选 0 项</span>
+  </div>
+  <div id="reviewFindings"><div class="empty"><div class="icon">📋</div><p>请先完成一次项目审计</p></div></div>
+</div>
+</div>
+
+<div class="footer">SentinelAI · 安全审计控制台 v2.0</div>
+</div>
+
+<script>
+let taskId = null;
+let curFindings = [];
+let pieChart = null;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'review') loadReviewFindings();
+}
+
+function backToInput() {
+  document.getElementById('resultPanel').style.display = 'none';
+  document.getElementById('inputPanel').style.display = 'block';
+  document.getElementById('projectInput').value = '';
+}
+
+function startScan() {
+  const v = document.getElementById('projectInput').value.trim();
+  if (!v) { alert('请输入项目路径'); return; }
+  doScan(JSON.stringify({project: v}));
+}
+
+function uploadFile(el) {
+  if (!el.files[0]) return;
+  const fd = new FormData(); fd.append('file', el.files[0]);
+  doScan(fd, true);
+}
+
+const PIPELINE_STEPS = [
+  { id: 'ps1', name: 'Parser Agent', label: '项目结构扫描' },
+  { id: 'ps2', name: 'Security Agent', label: '漏洞检测' },
+  { id: 'ps3', name: 'Review Agent', label: '审查与修复' },
+  { id: 'ps4', name: 'Report Agent', label: '报告生成' },
+  { id: 'ps5', name: 'Summary', label: '汇总结果' },
+];
+
+const STEP_PROGRESS = [0, 20, 40, 60, 80];  // 每一步的开始进度
+
+function resetPipeline() {
+  PIPELINE_STEPS.forEach(s => {
+    document.getElementById(s.id).className = 'pstep';
+  });
+  document.getElementById('pipeline').classList.remove('active');
+  document.getElementById('pipeline').style.removeProperty('--progress');
+  document.getElementById('pipelineProgress').textContent = '等待启动...';
+}
+
+function updatePipeline(progress) {
+  const pipeline = document.getElementById('pipeline');
+  pipeline.classList.add('active');
+
+  // 计算当前在第几步
+  let activeIdx = -1;
+  for (let i = PIPELINE_STEPS.length - 1; i >= 0; i--) {
+    if (progress >= STEP_PROGRESS[i]) { activeIdx = i; break; }
+  }
+
+  // 更新每一步的状态
+  for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+    const el = document.getElementById(PIPELINE_STEPS[i].id);
+    if (progress >= 100) {
+      el.className = 'pstep done';
+    } else if (i < activeIdx) {
+      el.className = 'pstep done';
+    } else if (i === activeIdx) {
+      el.className = 'pstep active';
+    } else {
+      el.className = 'pstep';
+    }
+  }
+
+  // 更新连接线进度
+  pipeline.style.setProperty('--progress', progress + '%');
+
+  // 更新底部文字
+  if (progress >= 100) {
+    document.getElementById('pipelineProgress').textContent = '✅ 全部完成';
+  } else if (activeIdx >= 0) {
+    const s = PIPELINE_STEPS[activeIdx];
+    document.getElementById('pipelineProgress').textContent = `▶ ${s.name} — ${s.label}...`;
+  }
+}
+
+function markPipelineFail() {
+  // 找到当前 active 的步骤，标红
+  PIPELINE_STEPS.forEach(s => {
+    const el = document.getElementById(s.id);
+    if (el.classList.contains('active')) {
+      el.className = 'pstep fail';
+    }
+  });
+  document.getElementById('pipelineProgress').textContent = '❌ 流水线执行失败';
+}
+
+function doScan(body, isForm) {
+  document.getElementById('inputPanel').style.display = 'none';
+  document.getElementById('resultPanel').style.display = 'none';
+  document.getElementById('statusPanel').style.display = 'block';
+  resetPipeline();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('statusText').textContent = '正在启动...';
+
+  const url = isForm ? '/api/upload' : '/api/scan';
+  const opts = { method: 'POST' };
+  if (isForm) opts.body = body;
+  else { opts.headers = {'Content-Type':'application/json'}; opts.body = body; }
+
+  fetch(url, opts).then(r=>r.json()).then(d => {
+    if (d.error) { alert(d.error); return; }
+    taskId = d.task_id;
+    pollStatus(d.task_id);
+  });
+}
+
+function pollStatus(id) {
+  const iv = setInterval(() => {
+    fetch('/api/status/' + id).then(r=>r.json()).then(d => {
+      if (d.error) { clearInterval(iv); return; }
+      const p = d.progress || 0;
+      document.getElementById('progressFill').style.width = p + '%';
+      updatePipeline(p);
+
+      // Status text
+      if (p < 20) document.getElementById('statusText').textContent = '解析项目结构中...';
+      else if (p < 40) document.getElementById('statusText').textContent = '运行安全检测...';
+      else if (p < 60) document.getElementById('statusText').textContent = '审查与修复中...';
+      else if (p < 80) document.getElementById('statusText').textContent = '生成审计报告...';
+      else if (p < 100) document.getElementById('statusText').textContent = '汇总结果...';
+      else document.getElementById('statusText').textContent = '审计完成 ✓';
+
+      if (d.status === 'done' || d.status === 'failed') {
+        clearInterval(iv);
+        if (d.status === 'done') {
+          updatePipeline(100);
+          document.getElementById('progressFill').style.width = '100%';
+          document.getElementById('statusText').textContent = '审计完成 ✓';
+          setTimeout(() => loadReport(), 500);
+        } else {
+          markPipelineFail();
+          const errMsg = d.error || '审计失败';
+          document.getElementById('statusText').textContent = '❌ ' + errMsg;
+          // 5秒后回到输入面板
+          setTimeout(() => {
+            alert('审计失败: ' + errMsg);
+            backToInput();
+          }, 3000);
+        }
+      }
+    });
+  }, 1500);
+}
+
+function loadReport() {
+  if (!taskId) return;
+  fetch('/api/report/' + taskId).then(r=>r.json()).then(d => {
+    if (d.error) return;
+    document.getElementById('statusPanel').style.display = 'none';
+    document.getElementById('resultPanel').style.display = 'block';
+
+    const sc = d.risk_assessment?.score || 0;
+    const lv = d.risk_assessment?.level || '';
+    const sm = d.summary || {};
+    const fs = d.findings || [];
+    curFindings = fs;
+
+    const el = document.getElementById('scoreNum');
+    el.textContent = sc;
+    el.className = 'score-num';
+    if (sc >= 80) el.classList.add('score-critical');
+    else if (sc >= 60) el.classList.add('score-high');
+    else if (sc >= 40) el.classList.add('score-medium');
+    else el.classList.add('score-low');
+    document.getElementById('scoreLevel').textContent = lv;
+
+    document.getElementById('stCr').textContent = sm.critical || 0;
+    document.getElementById('stHi').textContent = sm.high || 0;
+    document.getElementById('stMe').textContent = sm.medium || 0;
+    document.getElementById('stLo').textContent = sm.low || 0;
+
+    // Pie chart
+    if (pieChart) pieChart.destroy();
+    const ctx = document.getElementById('pieChart').getContext('2d');
+    pieChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Critical','High','Medium','Low'],
+        datasets: [{
+          data: [sm.critical||0, sm.high||0, sm.medium||0, sm.low||0],
+          backgroundColor: ['#e94560','#fa8c16','#fadb14','#52c41a'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8, font: {size: 11} } } }
+      }
+    });
+
+    // Table
+    const tb = document.getElementById('findingsBody');
+    tb.innerHTML = '';
+    if (fs.length === 0) {
+      tb.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="icon">✅</div><p>未发现安全风险</p></div></td></tr>';
+      return;
+    }
+    fs.forEach((f, i) => {
+      const sev = f.severity || 'Low';
+      const sc = sev === 'Critical' ? 'sev-critical' : sev === 'High' ? 'sev-high' : sev === 'Medium' ? 'sev-medium' : 'sev-low';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="chk"><input type="checkbox" value="${i}" onchange="updateCount()"></td>
+        <td><span class="sev-tag ${sc}">${sev}</span></td>
+        <td>${f.title || f.vuln_type || ''}</td>
+        <td><div class="file-path">${f.file_path || ''}:${f.line_start || ''}</div></td>
+        <td><a class="detail-toggle" onclick="toggleDetail(this)">查看</a></td>`;
+      tr.insertAdjacentHTML('beforeend', `<tr class="finding-detail" id="dtl-${i}"><td colspan="5">
+        <strong>描述：</strong>${f.description || ''}<br>
+        ${f.evidence ? '<strong>依据：</strong><code>'+f.evidence+'</code><br>' : ''}
+        <strong>建议：</strong>${f.fix_suggestion || ''}
+        ${f.fix_patch ? '<br><strong>Patch：</strong><code>'+f.fix_patch+'</code>' : ''}
+      </td></tr>`);
+      tb.appendChild(tr);
+    });
+  });
+}
+
+function toggleDetail(el) {
+  const tr = el.closest('tr').nextElementSibling;
+  tr.classList.toggle('open');
+  el.textContent = tr.classList.contains('open') ? '收起' : '查看';
+}
+
+function updateCount() {
+  const n = document.querySelectorAll('#findingsBody input:checked').length;
+  document.getElementById('selectedCount').textContent = '已选 ' + n + ' 项';
+}
+
+function batchUpdate(status) {
+  const ids = [];
+  document.querySelectorAll('#findingsBody input:checked').forEach(c => {
+    ids.push(curFindings[parseInt(c.value)].id || parseInt(c.value));
+  });
+  if (ids.length === 0) { alert('请先勾选需要处理的发现'); return; }
+  fetch('/api/findings/batch', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ids, status})
+  }).then(r=>r.json()).then(d => {
+    alert('已标记 ' + ids.length + ' 项为「' + d.status + '」');
+    document.querySelectorAll('#findingsBody input:checked').forEach(c => c.checked = false);
+    updateCount();
+  });
+}
+
+function loadReviewFindings() {
+  fetch('/api/findings').then(r=>r.json()).then(d => {
+    const wrap = document.getElementById('reviewFindings');
+    const tb = document.getElementById('reviewToolbar');
+    if (!d.findings || d.findings.length === 0) {
+      wrap.innerHTML = '<div class="empty"><div class="icon">📋</div><p>暂无审计数据，请先执行项目扫描</p></div>';
+      return;
+    }
+    tb.style.display = 'flex';
+    let html = '<table class="table"><thead><tr><th class="chk"><input type="checkbox" onchange="toggleAll(this)"></th><th>严重程度</th><th>漏洞类型</th><th>位置</th><th>处理状态</th></tr></thead><tbody>';
+    d.findings.forEach((f, i) => {
+      const sev = f.severity || 'Low';
+      const sc = sev === 'Critical' ? 'sev-critical' : sev === 'High' ? 'sev-high' : sev === 'Medium' ? 'sev-medium' : 'sev-low';
+      html += `<tr><td class="chk"><input type="checkbox" class="rchk" value="${i}"></td>
+        <td><span class="sev-tag ${sc}">${sev}</span></td>
+        <td>${f.title || f.vuln_type || ''}</td>
+        <td><div class="file-path">${f.file_path || ''}:${f.line_start || ''}</div></td>
+        <td><span style="color:#999;font-size:12px">${f.status || '待处理'}</span></td></tr>`;
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  });
+}
+
+function toggleAll(el) {
+  document.querySelectorAll('.rchk, #findingsBody input[type=checkbox]').forEach(c => c.checked = el.checked);
+  updateCount();
+}
+</script>
+</body>
+</html>
