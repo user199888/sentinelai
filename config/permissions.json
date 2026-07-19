@@ -1,0 +1,551 @@
+{
+  "_comment": "SentinelAI 多智能体权限配置 v2.0",
+  "version": "2.0.0",
+  "schema": "permissions-v1",
+
+  "roles": {
+    "L0_READONLY": {
+      "name": "只读角色",
+      "level": 0,
+      "description": "只能读取项目文件和元数据"
+    },
+    "L1_DETECTOR": {
+      "name": "安全检测角色",
+      "level": 1,
+      "description": "读取文件 + 执行安全检测"
+    },
+    "L2_REVIEWER": {
+      "name": "审查修复角色",
+      "level": 2,
+      "description": "读取 + 分析 + 生成修复代码"
+    },
+    "L3_REPORTER": {
+      "name": "报告生成角色",
+      "level": 3,
+      "description": "读取 + 写入报告文件"
+    },
+    "L4_TESTER": {
+      "name": "测试执行角色",
+      "level": 4,
+      "description": "读取 + 执行测试命令"
+    },
+    "L5_ADMIN": {
+      "name": "管理员角色",
+      "level": 5,
+      "description": "完全控制"
+    }
+  },
+
+  "agents": [
+    {
+      "agent_id": "pm",
+      "name": "PM Agent",
+      "role": "L5_ADMIN",
+      "description": "流水线调度与项目管理",
+      "entry": "pm/orchestrator.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["project_root", "agent_outputs"],
+          "description": "读取所有 Agent 产出文件"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["pm/"],
+          "description": "写入调度日志"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除任何文件"
+        },
+        "network": {
+          "allowed": true,
+          "scope": ["webhook"],
+          "description": "发送飞书通知"
+        },
+        "subprocess": {
+          "allowed": true,
+          "scope": ["scanner.py", "detector.py", "reviewer.py", "reporter.py"],
+          "description": "调度其他 Agent 子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "PM Agent 不直接操作数据库"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "PM Agent 不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "不得直接执行安全审计",
+        "不得修改 Agent 配置文件",
+        "不得访问项目外的文件系统"
+      ]
+    },
+    {
+      "agent_id": "parser",
+      "name": "Parser Agent",
+      "role": "L0_READONLY",
+      "description": "项目结构扫描与索引生成",
+      "entry": "parser/scanner.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["target_project"],
+          "description": "递归读取目标项目目录"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["parser/"],
+          "description": "输出 project-index.json"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除任何文件"
+        },
+        "network": {
+          "allowed": false,
+          "description": "禁止网络请求"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行任何子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不直接操作数据库"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "不得修改项目文件",
+        "不得执行代码",
+        "不得访问项目外文件"
+      ]
+    },
+    {
+      "agent_id": "security",
+      "name": "Security Agent",
+      "role": "L1_DETECTOR",
+      "description": "安全漏洞检测引擎",
+      "entry": "security/detector.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["target_project", "project_index"],
+          "description": "读取项目源码和索引"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["security/"],
+          "description": "输出 security-findings.json"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除文件"
+        },
+        "network": {
+          "allowed": false,
+          "description": "禁止网络请求（检测过程需要离线）"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不直接操作数据库"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "规则检测不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "不得修改项目文件",
+        "不得执行检测到的危险代码",
+        "不得泄露检测到的密钥/凭据",
+        "仅使用正则和规则引擎检测"
+      ]
+    },
+    {
+      "agent_id": "reviewer",
+      "name": "Review & Fix Agent",
+      "role": "L2_REVIEWER",
+      "description": "安全审查与修复方案生成",
+      "entry": "review-fix/reviewer.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["security_findings", "project_index", "target_project"],
+          "description": "读取漏洞清单、项目索引和源码"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["review-fix/"],
+          "description": "输出 review-report.json"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除文件"
+        },
+        "network": {
+          "allowed": true,
+          "scope": ["llm_api"],
+          "description": "调用 LLM API（DeepSeek/OpenAI）"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不直接操作数据库"
+        },
+        "llm_access": {
+          "allowed": true,
+          "scope": ["analyze_vulnerability"],
+          "description": "调用大模型分析漏洞生成修复建议"
+        }
+      },
+      "restrictions": [
+        "不得自动应用 Patch 到原始项目",
+        "不得修改原始项目文件",
+        "LLM 生成代码需人工复核后方可应用",
+        "禁止将项目源码直接发送到外部"
+      ]
+    },
+    {
+      "agent_id": "coder",
+      "name": "Coder Agent (LLM)",
+      "role": "L2_REVIEWER",
+      "description": "LLM 智能代码分析",
+      "entry": "llm/client.py",
+      "permissions": {
+        "file_read": {
+          "allowed": false,
+          "description": "LLM 客户端不直接读文件，接收调用方传入的代码片段"
+        },
+        "file_write": {
+          "allowed": false,
+          "description": "不写文件"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除文件"
+        },
+        "network": {
+          "allowed": true,
+          "scope": ["llm_api"],
+          "description": "调用 DeepSeek / OpenAI / Ollama API"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不操作数据库"
+        },
+        "llm_access": {
+          "allowed": true,
+          "scope": ["chat_completions"],
+          "description": "调用大模型生成漏洞分析"
+        }
+      },
+      "restrictions": [
+        "不得直接将完整项目代码发送给 LLM",
+        "仅发送相关漏洞代码片段",
+        "LLM 输出不得直接代替人工安全决策"
+      ]
+    },
+    {
+      "agent_id": "reporter",
+      "name": "Report Agent",
+      "role": "L3_REPORTER",
+      "description": "审计报告生成",
+      "entry": "report/reporter.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["all_agent_outputs"],
+          "description": "读取所有 Agent 产出文件"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["report/"],
+          "description": "输出 markdown/html/json 报告"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除文件"
+        },
+        "network": {
+          "allowed": true,
+          "scope": ["webhook"],
+          "description": "发送飞书通知（生成通知文案）"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不直接操作数据库"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "报告生成不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "不得修改项目源码",
+        "不得执行任意系统命令",
+        "报告内容不得包含未脱敏的敏感信息"
+      ]
+    },
+    {
+      "agent_id": "notifier",
+      "name": "Notifier Agent",
+      "role": "L3_REPORTER",
+      "description": "飞书消息推送",
+      "entry": "shared/feishu_notifier.py",
+      "permissions": {
+        "file_read": {
+          "allowed": true,
+          "scope": ["config"],
+          "description": "读取 Webhook 配置文件"
+        },
+        "file_write": {
+          "allowed": false,
+          "description": "不写文件"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除文件"
+        },
+        "network": {
+          "allowed": true,
+          "scope": ["feishu_webhook"],
+          "description": "POST 消息到飞书群机器人"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": false,
+          "description": "不操作数据库"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "只发送审计结果摘要",
+        "不得发送完整源码到飞书",
+        "Webhook URL 不得泄露"
+      ]
+    },
+    {
+      "agent_id": "db_manager",
+      "name": "Database Manager",
+      "role": "L5_ADMIN",
+      "description": "数据库管理",
+      "entry": "shared/db.py",
+      "permissions": {
+        "file_read": {
+          "allowed": false,
+          "description": "通过 API 操作数据库"
+        },
+        "file_write": {
+          "allowed": true,
+          "scope": ["sentinelai.db"],
+          "description": "写入 SQLite 数据库"
+        },
+        "file_delete": {
+          "allowed": false,
+          "description": "禁止删除数据库文件"
+        },
+        "network": {
+          "allowed": false,
+          "description": "禁止网络请求"
+        },
+        "subprocess": {
+          "allowed": false,
+          "description": "不执行子进程"
+        },
+        "database": {
+          "allowed": true,
+          "scope": ["projects", "findings", "reports", "tasks", "logs"],
+          "description": "CRUD 操作所有数据表"
+        },
+        "llm_access": {
+          "allowed": false,
+          "description": "不调用 LLM"
+        }
+      },
+      "restrictions": [
+        "所有数据库操作需通过 db.py 接口",
+        "不得直接修改数据库文件",
+        "敏感数据写入前需脱敏"
+      ]
+    }
+  ],
+
+  "resource_access_matrix": {
+    "description": "资源访问矩阵：行=Agent，列=资源",
+    "resources": [
+      {
+        "resource": "target_project/",
+        "description": "被审计的目标项目目录",
+        "access": {
+          "pm": "none",
+          "parser": "read",
+          "security": "read",
+          "reviewer": "read",
+          "coder": "none",
+          "reporter": "none",
+          "notifier": "none",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "parser/project-index.json",
+        "description": "项目索引文件",
+        "access": {
+          "pm": "read",
+          "parser": "write",
+          "security": "read",
+          "reviewer": "read",
+          "coder": "none",
+          "reporter": "read",
+          "notifier": "none",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "security/security-findings.json",
+        "description": "原始漏洞清单",
+        "access": {
+          "pm": "read",
+          "parser": "none",
+          "security": "write",
+          "reviewer": "read",
+          "coder": "none",
+          "reporter": "read",
+          "notifier": "none",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "review-fix/review-report.json",
+        "description": "审查报告（含LLM分析）",
+        "access": {
+          "pm": "read",
+          "parser": "none",
+          "security": "none",
+          "reviewer": "write",
+          "coder": "none",
+          "reporter": "read",
+          "notifier": "none",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "report/security-report.*",
+        "description": "最终的审计报告（md/html/json）",
+        "access": {
+          "pm": "read",
+          "parser": "none",
+          "security": "none",
+          "reviewer": "none",
+          "coder": "none",
+          "reporter": "write",
+          "notifier": "read",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "sentinelai.db",
+        "description": "SQLite 数据库",
+        "access": {
+          "pm": "none",
+          "parser": "none",
+          "security": "none",
+          "reviewer": "none",
+          "coder": "none",
+          "reporter": "none",
+          "notifier": "none",
+          "db_manager": "write"
+        }
+      },
+      {
+        "resource": "LLM API (DeepSeek/OpenAI)",
+        "description": "大模型 API 服务",
+        "access": {
+          "pm": "none",
+          "parser": "none",
+          "security": "none",
+          "reviewer": "call",
+          "coder": "call",
+          "reporter": "none",
+          "notifier": "none",
+          "db_manager": "none"
+        }
+      },
+      {
+        "resource": "Feishu Webhook",
+        "description": "飞书群机器人",
+        "access": {
+          "pm": "call",
+          "parser": "none",
+          "security": "none",
+          "reviewer": "none",
+          "coder": "none",
+          "reporter": "none",
+          "notifier": "call",
+          "db_manager": "none"
+        }
+      }
+    ]
+  },
+
+  "audit_rules": [
+    {
+      "rule_id": "AUDIT-001",
+      "description": "所有文件写入操作记录日志",
+      "severity": "medium",
+      "enforcement": "自动"
+    },
+    {
+      "rule_id": "AUDIT-002",
+      "description": "LLM API 调用记录请求内容和消耗",
+      "severity": "low",
+      "enforcement": "自动"
+    },
+    {
+      "rule_id": "AUDIT-003",
+      "description": "网络请求（Webhook/API）记录目标地址",
+      "severity": "low",
+      "enforcement": "自动"
+    },
+    {
+      "rule_id": "AUDIT-004",
+      "description": "子进程执行记录完整命令行",
+      "severity": "medium",
+      "enforcement": "自动"
+    },
+    {
+      "rule_id": "AUDIT-005",
+      "description": "异常/错误操作即时告警",
+      "severity": "high",
+      "enforcement": "系统自动"
+    }
+  ]
+}
