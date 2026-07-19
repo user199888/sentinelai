@@ -1,0 +1,83 @@
+{
+  "_comment": "SentinelAI 多智能体系统配置",
+  "version": "2.0.0",
+  "agents": [
+    {
+      "name": "PM Agent",
+      "role": "project_manager",
+      "entry": "pm/orchestrator.py",
+      "description": "项目管理与流水线编排，调度各Agent按顺序执行",
+      "depends_on": [],
+      "config": {
+        "timeout_seconds": 300,
+        "retry_count": 1,
+        "log_level": "info"
+      }
+    },
+    {
+      "name": "Parser Agent",
+      "role": "parser",
+      "entry": "parser/scanner.py",
+      "description": "项目扫描与索引生成，识别技术栈和依赖",
+      "depends_on": ["PM Agent"],
+      "config": {
+        "max_file_size_mb": 10,
+        "ignore_patterns": ["node_modules", ".git", "__pycache__"],
+        "output": "parser/project-index.json"
+      }
+    },
+    {
+      "name": "Security Agent",
+      "role": "security_scanner",
+      "entry": "security/detector.py",
+      "description": "安全漏洞检测，覆盖SQL注入/硬编码密钥/XSS等",
+      "depends_on": ["Parser Agent"],
+      "config": {
+        "severity_levels": ["Critical", "High", "Medium", "Low", "Info"],
+        "output": "security/security-findings.json"
+      }
+    },
+    {
+      "name": "Review & Fix Agent",
+      "role": "reviewer",
+      "entry": "review-fix/reviewer.py",
+      "description": "安全审查与修复，复核漏洞等级、生成修复方案",
+      "depends_on": ["Security Agent"],
+      "config": {
+        "llm_enhanced": true,
+        "patch_generation": true,
+        "output": "review-fix/review-report.json"
+      }
+    },
+    {
+      "name": "Coder Agent",
+      "role": "llm_analyst",
+      "entry": "llm/client.py",
+      "description": "LLM智能分析，调用大模型生成专业修复建议",
+      "depends_on": ["Review & Fix Agent"],
+      "config": {
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "temperature": 0.3,
+        "max_tokens": 2048
+      }
+    },
+    {
+      "name": "Report Agent",
+      "role": "reporter",
+      "entry": "report/reporter.py",
+      "description": "报告生成，输出Markdown/HTML/JSON三种格式",
+      "depends_on": ["Review & Fix Agent"],
+      "config": {
+        "formats": ["markdown", "html", "json"],
+        "output_dir": "report/"
+      }
+    }
+  ],
+  "global": {
+    "project_root": "/home/zyzyt/.openclaw/workspace/sentinelai",
+    "db_path": "shared/sentinelai.db",
+    "log_dir": "logs/",
+    "feishu_webhook": "config/feishu_webhook.txt"
+  }
+}
