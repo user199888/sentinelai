@@ -39,10 +39,28 @@ IMPACT_SCOPE = {
 
 
 def review_findings(findings, project_index=None):
-    """审查安全发现，补充修复方案和Patch"""
+    """审查安全发现，补充修复方案和Patch（支持 LLM 增强）"""
     reviewed = []
 
-    for finding in findings:
+    # 尝试加载 LLM 客户端
+    llm_client = None
+    llm_available = False
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__))))
+        from llm.client import analyze_vulnerability
+        llm_client = analyze_vulnerability
+        # 快速检查是否配置了 API Key
+        cfg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'llm.json')
+        if os.path.exists(cfg_path):
+            import json
+            with open(cfg_path) as f:
+                cfg = json.load(f)
+                llm_available = bool(cfg.get('api_key')) or cfg.get('provider') == 'ollama'
+    except Exception:
+        pass
+
+    total = len(findings)
+    for idx, finding in enumerate(findings):
         entry = dict(finding)
 
         # 复核严重性
@@ -84,6 +102,37 @@ def review_findings(findings, project_index=None):
         else:
             entry['fix_priority'] = 'P3 - 关注'
             entry['fix_urgency'] = '建议在下个迭代中关注'
+
+        # ── LLM 增强分析（如果可用） ──
+        llm_analysis = None
+        if llm_available and evidence:
+            try:
+                # 判断语言类型
+                lang = 'python'
+                if file_path:
+                    ext = os.path.splitext(file_path)[1].lower()
+                    lang_map = {'.js': 'javascript', '.jsx': 'javascript', '.ts': 'typescript',
+                                '.tsx': 'typescript', '.java': 'java', '.go': 'go', '.rs': 'rust',
+                                '.c': 'c', '.cpp': 'cpp', '.php': 'php', '.rb': 'ruby', '.sh': 'shell'}
+                    lang = lang_map.get(ext, 'python')
+                print(f"  🧠 LLM 分析漏洞 {idx+1}/{total}: {vuln_type}...", end=' ', flush=True)
+                llm_analysis = llm_client(vuln_type, severity, file_path, evidence, lang)
+                print('✅' if llm_analysis else '⚠️ 跳过')
+            except Exception as e:
+                print(f'⚠️ LLM 异常: {e}')
+
+        # ── 修复方案 ──
+        if llm_analysis:
+            # LLM 分析结果优先
+            entry['llm_analysis'] = llm_analysis
+            # 尝试从 LLM 回复中提取修复建议
+            if '描述' in llm_analysis[:20]:
+                entry['title'] = title
+            entry['fix_suggestion'] = llm_analysis[:500]
+            entry['description'] = description or llm_analysis[:200]
+        else:
+            # 规则兜底
+            pass
 
         # 自动生成Patch
         patch = generate_patch(evidence, vuln_type, severity)
