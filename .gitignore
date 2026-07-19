@@ -20,8 +20,9 @@ pm/step*.log
 # 上传文件
 web/uploads/
 
-# 配置文件（含 Webhook 密钥）
+# 配置文件（含密钥）
 config/feishu_webhook.txt
+config/llm.json
 
 # IDE
 .idea/
